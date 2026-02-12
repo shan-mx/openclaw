@@ -117,7 +117,8 @@ export async function agentViaGatewayCommand(opts: AgentCliOpts, runtime: Runtim
     sessionId: opts.sessionId,
   }).sessionKey;
 
-  const channel = normalizeMessageChannel(opts.channel);
+  // Preserve existing session routing unless the caller explicitly overrides.
+  const channel = normalizeMessageChannel(opts.channel ?? "last");
   const idempotencyKey = opts.runId?.trim() || randomIdempotencyKey();
 
   const response = await withProgress(
