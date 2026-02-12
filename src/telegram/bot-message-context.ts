@@ -1,7 +1,12 @@
 import type { Bot } from "grammy";
 import type { MsgContext } from "../auto-reply/templating.js";
 import type { OpenClawConfig } from "../config/config.js";
-import type { DmPolicy, TelegramGroupConfig, TelegramTopicConfig } from "../config/types.js";
+import type {
+  DmPolicy,
+  TelegramAccountConfig,
+  TelegramGroupConfig,
+  TelegramTopicConfig,
+} from "../config/types.js";
 import type { StickerMetadata, TelegramContext } from "./bot/types.js";
 import { resolveAckReaction } from "../agents/identity.js";
 import {
@@ -127,6 +132,46 @@ async function resolveStickerVisionSupport(params: {
   }
 }
 
+function normalizeConfiguredModel(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function resolveTelegramAccountConfiguredModel(
+  cfg: OpenClawConfig,
+  accountId?: string,
+): string | undefined {
+  const telegramCfg = cfg.channels?.telegram;
+  if (!telegramCfg) {
+    return undefined;
+  }
+  const baseModel = normalizeConfiguredModel(telegramCfg.model);
+  if (!accountId) {
+    return baseModel;
+  }
+  const accounts = telegramCfg.accounts;
+  if (!accounts || typeof accounts !== "object") {
+    return baseModel;
+  }
+  const directMatch = accounts[accountId] as TelegramAccountConfig | undefined;
+  if (directMatch) {
+    return normalizeConfiguredModel(directMatch.model) ?? baseModel;
+  }
+  const normalizedAccountId = accountId.trim().toLowerCase();
+  for (const [configuredId, configuredAccount] of Object.entries(accounts)) {
+    if (configuredId.trim().toLowerCase() !== normalizedAccountId) {
+      continue;
+    }
+    return (
+      normalizeConfiguredModel((configuredAccount as TelegramAccountConfig).model) ?? baseModel
+    );
+  }
+  return baseModel;
+}
+
 export const buildTelegramMessageContext = async ({
   primaryCtx,
   allMedia,
@@ -165,6 +210,11 @@ export const buildTelegramMessageContext = async ({
   const resolvedThreadId = threadSpec.scope === "forum" ? threadSpec.id : undefined;
   const replyThreadId = threadSpec.id;
   const { groupConfig, topicConfig } = resolveTelegramGroupConfig(chatId, resolvedThreadId);
+  const configuredModel = firstDefined(
+    normalizeConfiguredModel(topicConfig?.model),
+    normalizeConfiguredModel(groupConfig?.model),
+    resolveTelegramAccountConfiguredModel(cfg, account.accountId),
+  );
   const peerId = isGroup ? buildTelegramGroupPeerId(chatId, resolvedThreadId) : String(chatId);
   const parentPeer = buildTelegramParentPeer({ isGroup, resolvedThreadId, chatId });
   // Fresh config for bindings lookup; other routing inputs are payload-derived.
@@ -677,6 +727,7 @@ export const buildTelegramMessageContext = async ({
     Sticker: allMedia[0]?.stickerMetadata,
     ...(locationData ? toLocationContext(locationData) : undefined),
     CommandAuthorized: commandAuthorized,
+    model: configuredModel,
     // For groups: use resolved forum topic id; for DMs: use raw messageThreadId
     MessageThreadId: threadSpec.id,
     IsForum: isForum,
