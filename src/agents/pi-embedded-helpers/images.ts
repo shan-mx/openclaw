@@ -104,9 +104,14 @@ export async function sanitizeSessionMessagesImages(
             label,
             imageSanitization,
           )) as unknown as typeof assistantMsg.content;
+          if (nextContent.length === 0) {
+            continue;
+          }
           out.push({ ...assistantMsg, content: nextContent });
         } else {
-          out.push(assistantMsg);
+          // Cloud Code Assist rejects assistant turns with empty/invalid content blocks.
+          // Drop transcript-only error placeholders that carry no usable content.
+          continue;
         }
         continue;
       }
