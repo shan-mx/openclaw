@@ -233,6 +233,7 @@ git worktree remove /tmp/issue-99
 7. **Parallel is OK** - run many Codex processes at once for batch work
 8. **NEVER start Codex in ~/.openclaw/** - it'll read your soul docs and get weird ideas about the org chart!
 9. **NEVER checkout branches in ~/Projects/openclaw/** - that's the LIVE OpenClaw instance!
+10. **User Preference (Execution Mode)**: Use `--yolo` for general/system tasks. Use `--full-auto` ONLY for project-specific code (e.g., skill development) to leverage the sandbox.
 
 ---
 
