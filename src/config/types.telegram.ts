@@ -169,6 +169,8 @@ export type TelegramAccountConfig = {
    * Telegram expects unicode emoji (e.g., "👀") rather than shortcodes.
    */
   ackReaction?: string;
+  /** Optional model override (provider/model or model id) for this account. */
+  model?: string;
 };
 
 export type TelegramTopicConfig = {
@@ -183,6 +185,8 @@ export type TelegramTopicConfig = {
   allowFrom?: Array<string | number>;
   /** Optional system prompt snippet for this topic. */
   systemPrompt?: string;
+  /** Optional model override (provider/model or model id) for this topic. */
+  model?: string;
 };
 
 export type TelegramGroupConfig = {
@@ -202,6 +206,8 @@ export type TelegramGroupConfig = {
   allowFrom?: Array<string | number>;
   /** Optional system prompt snippet for this group. */
   systemPrompt?: string;
+  /** Optional model override (provider/model or model id) for this group. */
+  model?: string;
 };
 
 export type TelegramConfig = {
