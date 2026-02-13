@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { resolveSessionAuthProfileOverride } from "../../agents/auth-profiles/session-override.js";
 import type { ExecToolDefaults } from "../../agents/bash-tools.js";
 import { resolveFastModeState } from "../../agents/fast-mode.js";
+import { resolveModelAuthLabel } from "../../agents/model-auth-label.js";
 import {
   abortEmbeddedPiRun,
   isEmbeddedPiRunActive,
@@ -36,6 +37,7 @@ import { SILENT_REPLY_TOKEN } from "../tokens.js";
 import type { GetReplyOptions, ReplyPayload } from "../types.js";
 import { runReplyAgent } from "./agent-runner.js";
 import { applySessionHints } from "./body.js";
+import { resolveCommandReplyTarget } from "./command-reply-target.js";
 import type { buildCommandContext } from "./commands.js";
 import type { InlineDirectives } from "./directive-handling.js";
 import { buildGroupChatContext, buildGroupIntro } from "./groups.js";
@@ -59,12 +61,17 @@ function buildResetSessionNoticeText(params: {
   model: string;
   defaultProvider: string;
   defaultModel: string;
+  modelAuthLabel?: string;
 }): string {
   const modelLabel = `${params.provider}/${params.model}`;
   const defaultLabel = `${params.defaultProvider}/${params.defaultModel}`;
+  const authSuffix =
+    params.modelAuthLabel && params.modelAuthLabel !== "unknown"
+      ? ` · 🔑 ${params.modelAuthLabel}`
+      : "";
   return modelLabel === defaultLabel
-    ? `✅ New session started · model: ${modelLabel}`
-    : `✅ New session started · model: ${modelLabel} (default: ${defaultLabel})`;
+    ? `✅ New session started · model: ${modelLabel}${authSuffix}`
+    : `✅ New session started · model: ${modelLabel} (default: ${defaultLabel})${authSuffix}`;
 }
 
 function resolveResetSessionNoticeRoute(params: {
@@ -80,7 +87,15 @@ function resolveResetSessionNoticeRoute(params: {
       ? (commandChannel as Parameters<typeof routeReply>[0]["channel"])
       : undefined;
   const channel = params.ctx.OriginatingChannel ?? fallbackChannel;
-  const to = params.ctx.OriginatingTo ?? params.command.from ?? params.command.to;
+  const to = resolveCommandReplyTarget({
+    originatingTo: params.ctx.OriginatingTo,
+    originatingChannel: String(
+      params.ctx.OriginatingChannel ?? params.ctx.Surface ?? params.ctx.Provider,
+    ),
+    commandTargetSessionKey: params.ctx.CommandTargetSessionKey,
+    commandFrom: params.command.from,
+    commandTo: params.command.to,
+  });
   if (!channel || channel === "webchat" || !to) {
     return null;
   }
@@ -98,6 +113,8 @@ async function sendResetSessionNotice(params: {
   model: string;
   defaultProvider: string;
   defaultModel: string;
+  agentDir: string;
+  sessionEntry?: SessionEntry;
 }): Promise<void> {
   const route = resolveResetSessionNoticeRoute({
     ctx: params.ctx,
@@ -106,6 +123,12 @@ async function sendResetSessionNotice(params: {
   if (!route) {
     return;
   }
+  const modelAuthLabel = resolveModelAuthLabel({
+    provider: params.provider,
+    cfg: params.cfg,
+    sessionEntry: params.sessionEntry,
+    agentDir: params.agentDir,
+  });
   await routeReply({
     payload: {
       text: buildResetSessionNoticeText({
@@ -113,6 +136,7 @@ async function sendResetSessionNotice(params: {
         model: params.model,
         defaultProvider: params.defaultProvider,
         defaultModel: params.defaultModel,
+        modelAuthLabel,
       }),
     },
     channel: route.channel,
@@ -291,6 +315,13 @@ export async function runPreparedReply(
   const isBareSessionReset =
     isNewSession &&
     ((baseBodyTrimmedRaw.length === 0 && rawBodyTrimmed.length > 0) || isBareNewOrReset);
+  const resolvedCommandReplyTo = resolveCommandReplyTarget({
+    originatingTo: ctx.OriginatingTo,
+    originatingChannel: String(ctx.OriginatingChannel ?? ctx.Surface ?? ctx.Provider),
+    commandTargetSessionKey: ctx.CommandTargetSessionKey,
+    commandFrom: command.from,
+    commandTo: command.to,
+  });
   const baseBodyFinal = isBareSessionReset ? buildBareSessionResetPrompt(cfg) : baseBody;
   const inboundUserContext = buildInboundUserContextPrefix(
     isNewSession
@@ -422,6 +453,8 @@ export async function runPreparedReply(
       model,
       defaultProvider,
       defaultModel,
+      agentDir,
+      sessionEntry,
     });
   }
   const sessionIdFinal = sessionId ?? crypto.randomUUID();
@@ -476,7 +509,7 @@ export async function runPreparedReply(
     enqueuedAt: Date.now(),
     // Originating channel for reply routing.
     originatingChannel: ctx.OriginatingChannel,
-    originatingTo: ctx.OriginatingTo,
+    originatingTo: resolvedCommandReplyTo,
     originatingAccountId: ctx.AccountId,
     originatingThreadId: ctx.MessageThreadId,
     originatingChatType: ctx.ChatType,
@@ -556,7 +589,10 @@ export async function runPreparedReply(
     blockStreamingEnabled,
     blockReplyChunking,
     resolvedBlockStreamingBreak,
-    sessionCtx,
+    sessionCtx:
+      resolvedCommandReplyTo && sessionCtx.OriginatingTo !== resolvedCommandReplyTo
+        ? { ...sessionCtx, OriginatingTo: resolvedCommandReplyTo }
+        : sessionCtx,
     shouldInjectGroupIntro,
     typingMode,
   });
