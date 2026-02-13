@@ -703,6 +703,60 @@ describe("createTelegramBot", () => {
     expect(payload.CommandTargetSessionKey).toBe("agent:main:main:thread:99");
   });
 
+  it("sets native group /new originating target to telegram chat", async () => {
+    onSpy.mockReset();
+    sendMessageSpy.mockReset();
+    commandSpy.mockReset();
+    const replySpy = replyModule.__replySpy as unknown as ReturnType<typeof vi.fn>;
+    replySpy.mockReset();
+    replySpy.mockResolvedValue({ text: "response" });
+
+    loadConfig.mockReturnValue({
+      commands: { native: true },
+      channels: {
+        telegram: {
+          groupPolicy: "open",
+          groups: { "*": { requireMention: false } },
+          allowFrom: ["*"],
+        },
+      },
+    });
+
+    createTelegramBot({ token: "tok" });
+    const handler = commandSpy.mock.calls.find((call) => call[0] === "new")?.[1] as
+      | ((ctx: Record<string, unknown>) => Promise<void>)
+      | undefined;
+    if (!handler) {
+      throw new Error("new command handler missing");
+    }
+
+    await handler({
+      message: {
+        chat: {
+          id: -1001234567890,
+          type: "supergroup",
+          title: "Forum Group",
+          is_forum: true,
+        },
+        from: { id: 12345, username: "testuser" },
+        text: "/new",
+        date: 1736380800,
+        message_id: 42,
+        message_thread_id: 99,
+      },
+      match: "",
+    });
+
+    expect(replySpy).toHaveBeenCalledTimes(1);
+    const payload = replySpy.mock.calls[0][0];
+    expect(payload.To).toBe("slash:12345");
+    expect(payload.OriginatingTo).toBe("telegram:-1001234567890");
+    expect(payload.OriginatingTo).not.toBe(payload.To);
+    expect(payload.CommandTargetSessionKey).toBe(
+      "agent:main:telegram:group:-1001234567890:topic:99",
+    );
+  });
+
   it("allows native DM commands for paired users", async () => {
     onSpy.mockClear();
     sendMessageSpy.mockClear();

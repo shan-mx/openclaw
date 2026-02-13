@@ -4,6 +4,7 @@ import { createInternalHookEvent, triggerInternalHook } from "../../hooks/intern
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { resolveSendPolicy } from "../../sessions/send-policy.js";
 import { shouldHandleTextCommands } from "../commands-registry.js";
+import { resolveCommandReplyTarget } from "./command-reply-target.js";
 import { handleAllowlistCommand } from "./commands-allowlist.js";
 import { handleApproveCommand } from "./commands-approve.js";
 import { handleBashCommand } from "./commands-bash.js";
@@ -94,8 +95,15 @@ export async function handleCommands(params: HandleCommandsParams): Promise<Comm
       // Use OriginatingChannel/To if available, otherwise fall back to command channel/from
       // oxlint-disable-next-line typescript/no-explicit-any
       const channel = params.ctx.OriginatingChannel || (params.command.channel as any);
-      // For replies, use 'from' (the sender) not 'to' (which might be the bot itself)
-      const to = params.ctx.OriginatingTo || params.command.from || params.command.to;
+      const to = resolveCommandReplyTarget({
+        originatingTo: params.ctx.OriginatingTo,
+        originatingChannel: String(
+          params.ctx.OriginatingChannel ?? params.ctx.Surface ?? params.ctx.Provider,
+        ),
+        commandTargetSessionKey: params.ctx.CommandTargetSessionKey,
+        commandFrom: params.command.from,
+        commandTo: params.command.to,
+      });
 
       if (channel && to) {
         const hookReply = { text: hookEvent.messages.join("\n\n") };

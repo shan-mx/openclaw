@@ -36,6 +36,7 @@ import { SILENT_REPLY_TOKEN } from "../tokens.js";
 import type { GetReplyOptions, ReplyPayload } from "../types.js";
 import { runReplyAgent } from "./agent-runner.js";
 import { applySessionHints } from "./body.js";
+import { resolveCommandReplyTarget } from "./command-reply-target.js";
 import type { buildCommandContext } from "./commands.js";
 import type { InlineDirectives } from "./directive-handling.js";
 import { buildGroupChatContext, buildGroupIntro } from "./groups.js";
@@ -208,6 +209,13 @@ export async function runPreparedReply(
   const isBareSessionReset =
     isNewSession &&
     ((baseBodyTrimmedRaw.length === 0 && rawBodyTrimmed.length > 0) || isBareNewOrReset);
+  const resolvedCommandReplyTo = resolveCommandReplyTarget({
+    originatingTo: ctx.OriginatingTo,
+    originatingChannel: String(ctx.OriginatingChannel ?? ctx.Surface ?? ctx.Provider),
+    commandTargetSessionKey: ctx.CommandTargetSessionKey,
+    commandFrom: command.from,
+    commandTo: command.to,
+  });
   const baseBodyFinal = isBareSessionReset ? BARE_SESSION_RESET_PROMPT : baseBody;
   const inboundUserContext = buildInboundUserContextPrefix(
     isNewSession
@@ -321,7 +329,7 @@ export async function runPreparedReply(
   if (resetTriggered && command.isAuthorizedSender) {
     // oxlint-disable-next-line typescript/no-explicit-any
     const channel = ctx.OriginatingChannel || (command.channel as any);
-    const to = ctx.OriginatingTo || command.from || command.to;
+    const to = resolvedCommandReplyTo;
     if (channel && to) {
       const modelLabel = `${provider}/${model}`;
       const defaultLabel = `${defaultProvider}/${defaultModel}`;
@@ -398,7 +406,7 @@ export async function runPreparedReply(
     enqueuedAt: Date.now(),
     // Originating channel for reply routing.
     originatingChannel: ctx.OriginatingChannel,
-    originatingTo: ctx.OriginatingTo,
+    originatingTo: resolvedCommandReplyTo,
     originatingAccountId: ctx.AccountId,
     originatingThreadId: ctx.MessageThreadId,
     originatingChatType: ctx.ChatType,
@@ -465,7 +473,10 @@ export async function runPreparedReply(
     blockStreamingEnabled,
     blockReplyChunking,
     resolvedBlockStreamingBreak,
-    sessionCtx,
+    sessionCtx:
+      resolvedCommandReplyTo && sessionCtx.OriginatingTo !== resolvedCommandReplyTo
+        ? { ...sessionCtx, OriginatingTo: resolvedCommandReplyTo }
+        : sessionCtx,
     shouldInjectGroupIntro,
     typingMode,
   });
