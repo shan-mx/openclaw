@@ -34,6 +34,7 @@ import {
   resolveTelegramUpdateId,
   type TelegramUpdateKeyContext,
 } from "./bot-updates.js";
+import { resolveReplyMedia } from "./bot/delivery.js";
 import {
   buildTelegramGroupPeerId,
   resolveTelegramForumThreadId,
@@ -293,6 +294,8 @@ export function createTelegramBot(opts: TelegramBotOptions) {
   const useAccessGroups = cfg.commands?.useAccessGroups !== false;
   const ackReactionScope = cfg.messages?.ackReactionScope ?? "group-mentions";
   const mediaMaxBytes = (opts.mediaMaxMb ?? telegramCfg.mediaMaxMb ?? 5) * 1024 * 1024;
+  const resolveReplyMediaForMessage = async (msg: Message) =>
+    await resolveReplyMedia(msg, mediaMaxBytes, opts.token, opts.proxyFetch);
   const logger = getChildLogger({ module: "telegram-auto-reply" });
   const streamMode = resolveTelegramStreamMode(telegramCfg);
   const resolveGroupPolicy = (chatId: string | number) =>
@@ -368,6 +371,7 @@ export function createTelegramBot(opts: TelegramBotOptions) {
     streamMode,
     textLimit,
     opts,
+    resolveReplyMedia: resolveReplyMediaForMessage,
   });
 
   registerTelegramNativeCommands({

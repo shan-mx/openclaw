@@ -179,4 +179,22 @@ describe("buildInboundUserContextPrefix", () => {
     const conversationInfo = parseConversationInfoPayload(text);
     expect(conversationInfo["sender"]).toBe("user@example.com");
   });
+
+  it("includes replied media paths and types in replied-message context", () => {
+    const prefix = buildInboundUserContextPrefix({
+      ChatType: "group",
+      ReplyToBody: "<media:image>",
+      ReplyToSender: "Ada",
+      ReplyToMediaPaths: ["media/inbound/replied.jpg"],
+      ReplyToMediaTypes: ["image/jpeg"],
+    } as TemplateContext);
+
+    const block = parseInboundMetaPayload(prefix);
+    expect(block).toEqual({
+      sender_label: "Ada",
+      body: "<media:image>",
+      media_paths: ["media/inbound/replied.jpg"],
+      media_types: ["image/jpeg"],
+    });
+  });
 });

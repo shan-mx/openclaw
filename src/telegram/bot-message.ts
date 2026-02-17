@@ -1,3 +1,4 @@
+import { type Message } from "@grammyjs/types";
 import type { ReplyToMode } from "../config/config.js";
 import type { TelegramAccountConfig } from "../config/types.telegram.js";
 import type { RuntimeEnv } from "../runtime.js";
@@ -21,6 +22,7 @@ type TelegramMessageProcessorDeps = Omit<
   streamMode: TelegramStreamMode;
   textLimit: number;
   opts: Pick<TelegramBotOptions, "token">;
+  resolveReplyMedia?: (msg: Message) => Promise<TelegramMediaRef[]>;
 };
 
 export const createTelegramMessageProcessor = (deps: TelegramMessageProcessorDeps) => {
@@ -44,6 +46,7 @@ export const createTelegramMessageProcessor = (deps: TelegramMessageProcessorDep
     streamMode,
     textLimit,
     opts,
+    resolveReplyMedia,
   } = deps;
 
   return async (
@@ -52,11 +55,12 @@ export const createTelegramMessageProcessor = (deps: TelegramMessageProcessorDep
     storeAllowFrom: string[],
     options?: { messageIdOverride?: string; forceWasMentioned?: boolean },
   ) => {
+    const replyMedia = resolveReplyMedia ? await resolveReplyMedia(primaryCtx.message) : [];
     const context = await buildTelegramMessageContext({
       primaryCtx,
       allMedia,
       storeAllowFrom,
-      options,
+      options: { ...options, replyMedia },
       bot,
       cfg,
       account,
