@@ -97,4 +97,22 @@ describe("buildInboundUserContextPrefix", () => {
     expect(text).toContain("Conversation info (untrusted metadata):");
     expect(text).toContain('"conversation_label": "ops-room"');
   });
+
+  it("includes replied media paths and types in replied-message context", () => {
+    const prefix = buildInboundUserContextPrefix({
+      ChatType: "group",
+      ReplyToBody: "<media:image>",
+      ReplyToSender: "Ada",
+      ReplyToMediaPaths: ["media/inbound/replied.jpg"],
+      ReplyToMediaTypes: ["image/jpeg"],
+    } as TemplateContext);
+
+    const block = parseInboundMetaPayload(prefix);
+    expect(block).toEqual({
+      sender_label: "Ada",
+      body: "<media:image>",
+      media_paths: ["media/inbound/replied.jpg"],
+      media_types: ["image/jpeg"],
+    });
+  });
 });

@@ -1,5 +1,4 @@
 import type { Bot } from "grammy";
-import type { MsgContext } from "../auto-reply/templating.js";
 import { resolveAckReaction } from "../agents/identity.js";
 import {
   findModelInCatalog,
@@ -17,6 +16,7 @@ import {
 } from "../auto-reply/reply/history.js";
 import { finalizeInboundContext } from "../auto-reply/reply/inbound-context.js";
 import { buildMentionRegexes, matchesMentionWithExplicit } from "../auto-reply/reply/mentions.js";
+import type { MsgContext } from "../auto-reply/templating.js";
 import { shouldAckReaction as shouldAckReactionGate } from "../channels/ack-reactions.js";
 import { resolveControlCommandGate } from "../channels/command-gating.js";
 import { formatLocationText, toLocationContext } from "../channels/location.js";
@@ -73,6 +73,7 @@ export type TelegramMediaRef = {
 type TelegramMessageContextOptions = {
   forceWasMentioned?: boolean;
   messageIdOverride?: string;
+  replyMedia?: TelegramMediaRef[];
 };
 
 type TelegramLogger = {
@@ -166,9 +167,7 @@ function resolveTelegramAccountConfiguredModel(
     if (configuredId.trim().toLowerCase() !== normalizedAccountId) {
       continue;
     }
-    return (
-      normalizeConfiguredModel((configuredAccount as TelegramAccountConfig).model) ?? baseModel
-    );
+    return normalizeConfiguredModel(configuredAccount.model) ?? baseModel;
   }
   return baseModel;
 }
@@ -192,6 +191,7 @@ export const buildTelegramMessageContext = async ({
   resolveGroupRequireMention,
   resolveTelegramGroupConfig,
 }: BuildTelegramMessageContextParams) => {
+  const replyMedia = options?.replyMedia ?? [];
   const msg = primaryCtx.message;
   recordChannelActivity({
     channel: "telegram",
@@ -689,6 +689,15 @@ export const buildTelegramMessageContext = async ({
     ReplyToBody: replyTarget?.body,
     ReplyToSender: replyTarget?.sender,
     ReplyToIsQuote: replyTarget?.kind === "quote" ? true : undefined,
+    ReplyToMediaPath: replyMedia[0]?.path,
+    ReplyToMediaType: replyMedia[0]?.contentType,
+    ReplyToMediaUrl: replyMedia[0]?.path,
+    ReplyToMediaPaths: replyMedia.length > 0 ? replyMedia.map((entry) => entry.path) : undefined,
+    ReplyToMediaUrls: replyMedia.length > 0 ? replyMedia.map((entry) => entry.path) : undefined,
+    ReplyToMediaTypes:
+      replyMedia.length > 0
+        ? (replyMedia.map((entry) => entry.contentType).filter(Boolean) as string[])
+        : undefined,
     ForwardedFrom: forwardOrigin?.from,
     ForwardedFromType: forwardOrigin?.fromType,
     ForwardedFromId: forwardOrigin?.fromId,
