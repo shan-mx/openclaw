@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { Readable } from "stream";
+import { fileURLToPath } from "url";
 import { withTempDownloadPath, type ClawdbotConfig } from "openclaw/plugin-sdk";
 import { resolveFeishuAccount } from "./accounts.js";
 import { createFeishuClient } from "./client.js";
@@ -415,12 +416,23 @@ export async function sendMediaFeishu(params: {
     buffer = mediaBuffer;
     name = fileName ?? "file";
   } else if (mediaUrl) {
-    const loaded = await getFeishuRuntime().media.loadWebMedia(mediaUrl, {
-      maxBytes: mediaMaxBytes,
-      optimizeImages: false,
-    });
-    buffer = loaded.buffer;
-    name = fileName ?? loaded.fileName ?? "file";
+    const looksRemote = /^https?:\/\//i.test(mediaUrl) || mediaUrl.startsWith("data:");
+    if (looksRemote) {
+      const loaded = await getFeishuRuntime().media.loadWebMedia(mediaUrl, {
+        maxBytes: mediaMaxBytes,
+        optimizeImages: false,
+      });
+      buffer = loaded.buffer;
+      name = fileName ?? loaded.fileName ?? "file";
+    } else {
+      const localPath = mediaUrl.startsWith("file://") ? fileURLToPath(mediaUrl) : mediaUrl;
+      const stat = await fs.promises.stat(localPath);
+      if (stat.size > mediaMaxBytes) {
+        throw new Error(`Media too large: ${stat.size} bytes > max ${mediaMaxBytes} bytes`);
+      }
+      buffer = await fs.promises.readFile(localPath);
+      name = fileName ?? path.basename(localPath) ?? "file";
+    }
   } else {
     throw new Error("Either mediaUrl or mediaBuffer must be provided");
   }
